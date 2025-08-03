@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kero Design Studio</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+
+    body {
+      font-family: 'Cairo', sans-serif;
+      margin: 0;
+      background: #1e1e1e;
+      color: #fff;
+    }
+
+    #topbar {
+      background: #2c2c2c;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #444;
+    }
+
+    .logo {
+      font-size: 1.3em;
+      color: #f1c40f;
+    }
+
+    .toolbar-buttons button {
+      margin-left: 10px;
+      padding: 6px 12px;
+      background: #3d3d3d;
+      border: none;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .toolbar-buttons button:hover {
+      background: #5a5a5a;
+    }
+
+    #workspace {
+      display: flex;
+      height: calc(100vh - 80px);
+    }
+
+    #tools, #layers {
+      width: 220px;
+      background: #2b2b2b;
+      padding: 15px;
+      border-left: 1px solid #444;
+      overflow-y: auto;
+    }
+
+    #tools h3, #layers h3 {
+      font-size: 1.1em;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 8px;
+    }
+
+    #tools button {
+      display: block;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 12px;
+      background: #3d3d3d;
+      border: none;
+      color: #fff;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+
+    #tools button:hover {
+      background: #4d4d4d;
+    }
+
+    #canvas-container {
+      flex-grow: 1;
+      background: #121212;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      border: 2px solid #555;
+      background: #222;
+    }
+
+    #layerList {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    #layerList li {
+      background: #444;
+      margin-bottom: 6px;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 0.95em;
+      cursor: pointer;
+      font-weight: 600;
+      user-select: none;
+      transition: background 0.3s;
+    }
+
+    #layerList li:hover {
+      background: #5a5a5a;
+    }
+
+    footer {
+      background: #2c2c2c;
+      text-align: center;
+      padding: 10px;
+      font-size: 0.85em;
+      border-top: 1px solid #444;
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <span class="logo">🎨 Kero Design Studio</span>
+    <div class="toolbar-buttons">
+      <button onclick="undo()">↶</button>
+      <button onclick="redo()">↷</button>
+      <button onclick="download()">💾 حفظ</button>
+      <input type="file" id="psdLoader" accept=".psd" style="display:none" onchange="loadPSD(event)" />
+      <button onclick="document.getElementById('psdLoader').click()">رفع PSD</button>
+    </div>
+  </div>
+
+  <div id="workspace">
+    <aside id="tools">
+      <h3>الأدوات</h3>
+      <button onclick="addText()">نص</button>
+      <button onclick="addRect()">مستطيل</button>
+      <button onclick="addCircle()">دائرة</button>
+      <button onclick="uploadImage()">صورة</button>
+      <input type="file" id="imgLoader" accept="image/*" style="display:none" onchange="loadImage(event)" />
+    </aside>
+
+    <section id="canvas-container">
+      <canvas id="canvas" width="900" height="600"></canvas>
+    </section>
+
+    <aside id="layers">
+      <h3>الطبقات</h3>
+      <ul id="layerList"></ul>
+    </aside>
+  </div>
+
+  <footer>
+    <p>&copy; 2025 Kero Design Studio - جميع الحقوق محفوظة</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+  <script src="https://unpkg.com/psd/dist/psd.min.js"></script>
+
+  <script>
+    const canvas = new fabric.Canvas("canvas", { preserveObjectStacking: true });
+    const undoStack = [];
+    const redoStack = [];
+
+    function saveState() {
+      redoStack.length = 0; // تفريغ الريدو
+      undoStack.push(JSON.stringify(canvas));
+      if (undoStack.length > 50) undoStack.shift(); // حد الذاكرة
+    }
+
+    function undo() {
+      if (undoStack.length > 0) {
+        redoStack.push(JSON.stringify(canvas));
+        const state = undoStack.pop();
+        canvas.loadFromJSON(state, canvas.renderAll.bind(canvas));
+        updateLayers();
+      }
+    }
+
+    function redo() {
+      if (redoStack.length > 0) {
+        undoStack.push(JSON.stringify(canvas));
+        const state = redoStack.pop();
+        canvas.loadFromJSON(state, canvas.renderAll.bind(canvas));
+        updateLayers();
+      }
+    }
+
+    function updateLayers() {
+      const list = document.getElementById("layerList");
+      list.innerHTML = "";
+      const objs = canvas.getObjects();
+      for(let i = objs.length - 1; i >= 0; i--) {
+        const obj = objs[i];
+        const li = document.createElement("li");
+        li.textContent = obj.type;
+        li.onclick = () => {
+          canvas.setActiveObject(obj);
+          canvas.renderAll();
+        };
+        list.appendChild(li);
+      }
+    }
+
+    canvas.on('object:added', () => {
+      saveState();
+      updateLayers();
+    });
+    canvas.on('object:modified', () => {
+      saveState();
+      updateLayers();
+    });
+    canvas.on('object:removed', () => {
+      saveState();
+      updateLayers();
+    });
+
+    function addText() {
+      const text = new fabric.IText("نص", {
+        left: 100,
+        top: 100,
+        fill: "#fff",
+        fontSize: 28
+      });
+      canvas.add(text).setActiveObject(text);
+    }
+
+    function addRect() {
+      const rect = new fabric.Rect({
+        left: 150,
+        top: 150,
+        fill: "#e74c3c",
+        width: 100,
+        height: 100
+      });
+      canvas.add(rect);
+    }
+
+    function addCircle() {
+      const circle = new fabric.Circle({
+        radius: 50,
+        fill: "#3498db",
+        left: 200,
+        top: 200
+      });
+      canvas.add(circle);
+    }
+
+    function uploadImage() {
+      document.getElementById("imgLoader").click();
+    }
+    function loadImage(e) {
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        fabric.Image.fromURL(event.target.result, function (img) {
+          img.scaleToWidth(300);
+          canvas.add(img);
+          updateLayers();
+        });
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    function download() {
+      const dataURL = canvas.toDataURL({ format: "png" });
+      const link = document.createElement("a");
+      link.href = dataURL;
+      link.download = "kero-design.png";
+      link.click();
+    }
+
+    function loadPSD(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const psd = new PSD(new Uint8Array(e.target.result));
+          psd.parse();
+          const tree = psd.tree();
+          const layers = tree.children();
+          layers.forEach(layer => {
+            if (layer.isGroup()) return; // نتخطى المجموعات
+            const canvasEl = layer.canvas();
+            if (!canvasEl) return;
+            const img = new fabric.Image(canvasEl, {
+              left: 0,
+              top: 0
+            });
+            canvas.add(img);
+          });
+          updateLayers();
+          alert("تم رفع ملف PSD وعرض الطبقات الأساسية");
+        } catch (error) {
+          alert("خطأ في تحميل ملف PSD: " + error.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  </script>
+</body>
+</html>
